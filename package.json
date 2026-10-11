@@ -9,7 +9,7 @@
     "start": "node --env-file-if-exists=.env server/index.js",
     "seed": "node --env-file-if-exists=.env server/scripts/seed.js",
     "admin:create": "node --env-file-if-exists=.env server/scripts/create-admin.js",
-    "build": "vite build",
+    "build": "vite build --configLoader native",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test --test-concurrency=1 server/tests/*.test.js"
   },

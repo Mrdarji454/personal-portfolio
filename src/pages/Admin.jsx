@@ -1,10 +1,14 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { Appearance } from "../Appearance";
+import { useDrawer } from "../useDrawer";
+import { Portrait } from "../blocks";
 import { SiteContext } from "../site";
 import { useSEO } from "../motion";
 import { Home, ProjectDetails } from "./PublicPages";
 import {
+  Menu,
   ArrowUp,
   X as CloseIcon,
   ArrowDown,
@@ -114,11 +118,13 @@ function Modal({ title: a, onClose: t, children: v }) {
   return (
     React.useEffect(() => {
       const m = document.activeElement;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
       return (
         h.current.showModal(),
         () => {
           var o;
-          ((o = h.current) == null || o.close(), m == null || m.focus());
+          ((o = h.current) == null || o.close(), document.body.style.overflow = previousOverflow, m == null || m.focus());
         }
       );
     }, []),
@@ -151,7 +157,11 @@ function Login({ onSuccess: a }) {
     [h, m] = React.useState(""),
     [o, p] = React.useState(""),
     [n, l] = React.useState(!1);
+  const pending = React.useRef(false);
   async function D(N) {
+    N.preventDefault();
+    if (pending.current) return;
+    pending.current = true;
     (N.preventDefault(), l(!0), p(""));
     try {
       (await api("/auth/login", {
@@ -166,6 +176,7 @@ function Login({ onSuccess: a }) {
     } catch (y) {
       p(y.message);
     } finally {
+      pending.current = false;
       l(!1);
     }
   }
@@ -222,6 +233,7 @@ function UploadInput({
   setBusy: m,
 }) {
   const [o, p] = React.useState(!1);
+  const pending = React.useRef(false);
   return (
     <label className={"upload-control"}>
       <span>{o ? "Uploading…" : t}</span>
@@ -230,12 +242,14 @@ function UploadInput({
         accept={a === "pdf" ? "application/pdf" : ".jpg,.jpeg,.png,.webp"}
         disabled={o}
         onChange={async (n) => {
+          if (pending.current) return;
           const l = n.target.files[0];
           if (l) {
             if (l.size > 8 * 1024 * 1024) {
               h(new Error("Files must be 8 MB or smaller."));
               return;
             }
+            pending.current = true;
             (p(!0), m == null || m(!0));
             try {
               const D = new FormData();
@@ -248,6 +262,7 @@ function UploadInput({
             } catch (D) {
               h(D);
             } finally {
+              pending.current = false;
               (p(!1), m == null || m(!1), (n.target.value = ""));
             }
           }
@@ -391,6 +406,7 @@ function ProfileEditor({
         m(!0));
     };
   async function x(r) {
+    if (N) { r.preventDefault(); return; }
     (r.preventDefault(),
       y(!0),
       D({}),
@@ -513,11 +529,7 @@ function ProfileEditor({
                     alt={"Current portrait"}
                   />
                 ) : (
-                  <img
-                    className={"admin-portrait"}
-                    src={"/portrait-placeholder.svg"}
-                    alt={"SVG portrait fallback"}
-                  />
+                  <div className="admin-portrait"><Portrait person={a.person} /></div>
                 )}
                 <UploadInput
                   kind={"image"}
@@ -691,6 +703,7 @@ function ProjectEditor({
         h(!0));
     };
   async function r(i) {
+    if (D) { i.preventDefault(); return; }
     (i.preventDefault(),
       N(!0),
       l({}),
@@ -982,6 +995,12 @@ function Admin() {
       total: 0,
       page: 1,
     });
+  const running = React.useRef(false);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [themePreviewOpen, setThemePreviewOpen] = React.useState(false);
+  const drawerRef = React.useRef(null), drawerTrigger = React.useRef(null);
+  const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
+  useDrawer(drawerOpen, drawerRef, drawerTrigger, closeDrawer, "(max-width: 1000px)");
   (React.useEffect(() => {
     const s = new AbortController();
     return (
@@ -1005,12 +1024,15 @@ function Admin() {
       );
     }, [N]));
   async function C(s, f = "", b) {
+    if (running.current) return false;
+    running.current = true;
     (O(""), x(""), i(!0));
     try {
       return (await s(), x(f), !0);
     } catch (j) {
       return (O(j.message), b == null || b(j), j.status === 401 && c(!0), !1);
     } finally {
+      running.current = false;
       i(!1);
     }
   }
@@ -1030,7 +1052,7 @@ function Admin() {
   }, [a]);
   function ee(s) {
     (N && !window.confirm("Discard unsaved changes and switch sections?")) ||
-      (y(!1), D(null), n(s), _());
+      (y(!1), D(null), n(s), closeDrawer(), _());
   }
   async function q(s, f) {
     const b = [...m];
@@ -1056,14 +1078,17 @@ function Admin() {
     </main>
   ) : a ? (
     <div className={"admin-app"}>
-      <aside className={"admin-sidebar"}>
+      <header className="admin-mobile-header"><Link to="/" className="brand">m<span className="brand-dot">.</span><span>Portfolio studio</span></Link><button ref={drawerTrigger} className="icon-button" aria-label="Open dashboard menu" aria-expanded={drawerOpen} aria-controls="admin-sidebar" onClick={() => setDrawerOpen(true)}><Menu /></button></header>
+      {drawerOpen && <div className="drawer-backdrop" onClick={closeDrawer} aria-hidden="true" />}
+      <aside id="admin-sidebar" ref={drawerRef} className={`admin-sidebar ${drawerOpen ? "open" : ""}`} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen ? true : undefined} aria-label={drawerOpen ? "Dashboard menu" : undefined} tabIndex={-1}>
+        <div className="drawer-heading"><span>Portfolio studio</span><button className="icon-button" aria-label="Close dashboard menu" onClick={closeDrawer}><CloseIcon /></button></div>
         <Link to={"/"} className={"admin-wordmark"}>
           {"m"}
           <span>{"."}</span>
         </Link>
         <div className={"eyebrow"}>{"PORTFOLIO STUDIO"}</div>
         <nav aria-label={"Dashboard sections"}>
-          {["Profile", "Projects", "Inquiries", "Media"].map((s) => (
+          {["Profile", "Appearance", "Projects", "Inquiries", "Media"].map((s) => (
             <button
               key={s}
               className={p === s ? "selected" : ""}
@@ -1082,12 +1107,14 @@ function Admin() {
           className={"logout-button"}
           disabled={r}
           onClick={() => {
+            closeDrawer();
             (N && !window.confirm("Discard unsaved changes and sign out?")) ||
               C(async () => {
                 (await api("/auth/logout", {
                   method: "POST",
                 }),
                   t(!1),
+                  closeDrawer(),
                   y(!1));
               });
           }}
@@ -1121,6 +1148,8 @@ function Admin() {
               setDirty={y}
               projects={m}
             />
+          ) : p === "Appearance" ? (
+            <Appearance setDirty={y} onUnauthorized={() => c(true)} onPreview={() => setThemePreviewOpen(true)} />
           ) : p === "Projects" ? (
             l ? (
               <ProjectEditor
@@ -1434,6 +1463,11 @@ function Admin() {
           </div>
         )}
       </main>
+      {themePreviewOpen && v && (
+        <Modal title="Website theme preview · unsaved appearance" onClose={() => setThemePreviewOpen(false)}>
+          <SiteContext.Provider value={{ ...v, projects: m.filter(project => project.published) }}><Home /></SiteContext.Provider>
+        </Modal>
+      )}
       {u && (
         <Modal
           title={"Sign in again · your changes are preserved"}

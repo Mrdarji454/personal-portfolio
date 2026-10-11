@@ -4,7 +4,8 @@ import { mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
-import { build } from "esbuild";
+import { build } from "vite";
+import react from "@vitejs/plugin-react";
 import { initialSite, initialProjects } from "../seed-content.js";
 let dom, React, act, createRoot, MemoryRouter, module, root;
 const content = {
@@ -31,6 +32,8 @@ before(
       configurable: true,
     });
     globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.SVGElement = dom.window.SVGElement;
     globalThis.getComputedStyle = dom.window.getComputedStyle;
     globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(
       dom.window,
@@ -41,6 +44,7 @@ before(
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     window.scrollTo = () => {};
     window.confirm = () => true;
+    globalThis.fetch = () => respond({ theme: "dark-ember" });
     window.matchMedia = (query) => ({
       matches: query.includes("reduce") && !query.includes("no-preference"),
       media: query,
@@ -58,19 +62,19 @@ before(
     };
     await mkdir(".cache", { recursive: true });
     await build({
-      entryPoints: ["server/tests/frontend-entry.jsx"],
-      outfile: ".cache/frontend-test.mjs",
-      bundle: true,
-      format: "esm",
-      platform: "node",
-      jsx: "automatic",
-      external: [
-        "react",
-        "react/jsx-runtime",
-        "react-dom",
-        "react-router-dom",
-        "lucide-react",
-      ],
+      configFile: false,
+      root: path.resolve("."),
+      publicDir: false,
+      logLevel: "error",
+      plugins: [react()],
+      ssr: { noExternal: ["gsap"] },
+      build: {
+        ssr: "server/tests/frontend-entry.jsx",
+        outDir: ".cache",
+        emptyOutDir: false,
+        minify: false,
+        rollupOptions: { output: { entryFileNames: "frontend-test.mjs" } },
+      },
     });
     React = await import("react");
     act = React.act;
@@ -98,9 +102,9 @@ async function render(Component, route = "/") {
         MemoryRouter,
         { initialEntries: [route] },
         React.createElement(
-          module.SiteContext.Provider,
-          { value: content },
-          React.createElement(Component),
+          module.ThemeProvider,
+          null,
+          React.createElement(module.SiteContext.Provider, { value: content }, React.createElement(Component)),
         ),
       ),
     );
@@ -138,6 +142,12 @@ test("mobile menu opens, Escape closes and restores focus; active route is acces
   await click(toggle);
   assert.equal(toggle.getAttribute("aria-expanded"), "true");
   assert.ok(document.getElementById("nav-links").classList.contains("open"));
+  assert.equal(document.body.style.overflow, "hidden");
+  assert.equal(document.activeElement.getAttribute("aria-label"), "Close navigation menu");
+  await act(async () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })));
+  assert.equal(document.activeElement.getAttribute("href"), "/resume");
+  await act(async () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })));
+  assert.equal(document.activeElement.getAttribute("aria-label"), "Close navigation menu");
   await act(async () =>
     window.dispatchEvent(
       new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
@@ -145,6 +155,7 @@ test("mobile menu opens, Escape closes and restores focus; active route is acces
   );
   assert.equal(toggle.getAttribute("aria-expanded"), "false");
   assert.equal(document.activeElement, toggle);
+  assert.equal(document.body.style.overflow, "");
   assert.equal(
     document
       .querySelector('a[href="/"][aria-current]')
@@ -158,7 +169,7 @@ test("reduced-motion pages remain visible and create no page tweens or triggers"
   assert.equal(module.ScrollTrigger.getAll().length, 0);
   assert.equal(module.gsap.getTweensOf(document.querySelector("h1")).length, 0);
   assert.notEqual(document.querySelector("h1").style.opacity, "0");
-  assert.ok(document.querySelector('img[src="/portrait-placeholder.svg"]'));
+  assert.ok(document.querySelector('svg[aria-label*="portrait placeholder"]'));
 });
 test("project search finds matching work and has a usable empty state", async () => {
   await render(module.Projects, "/projects");
@@ -265,4 +276,154 @@ test("admin login and profile-save failure keep unsaved content", async () => {
     /published/,
   );
   assert.equal(field.value, "Unsaved custom headline");
+});
+
+test("all public pages and admin sections use each saved theme, including on refresh", async () => {
+  for (const theme of ["dark-ember", "clean-white", "midnight-navy", "warm-ivory"]) {
+    globalThis.fetch = (url) => {
+      if (url === "/api/appearance") return respond({ theme });
+      if (url === "/api/auth/me") return respond({ authenticated: true, csrf: "theme-test" });
+      if (url === "/api/admin/site") return respond(initialSite);
+      if (url === "/api/admin/projects") return respond(content.projects);
+      if (url === "/api/admin/uploads") return respond([]);
+      if (url === "/api/admin/inquiries") return respond({ items: [], total: 0, page: 1 });
+      throw new Error(`Unexpected request ${url}`);
+    };
+    window.localStorage.setItem("theme", "untrusted-browser-choice");
+    for (const Page of [module.Home, module.About, module.Projects, module.Resume, module.Contact, () => React.createElement(module.ProjectDetails, { p: content.projects[0], preview: true })]) {
+      await render(Page);
+      assert.equal(document.documentElement.dataset.theme, theme);
+      assert.ok(document.querySelector("h1"));
+      assert.equal(module.ScrollTrigger.getAll().length, 0);
+    }
+    await render(module.Admin, "/admin");
+    for (const name of ["Appearance", "Projects", "Inquiries", "Media", "Profile"]) {
+      await click([...document.querySelectorAll(".admin-sidebar nav button")].find(el => el.textContent === name || el.textContent.startsWith(name)));
+      assert.equal(document.documentElement.dataset.theme, theme);
+      assert.ok(document.querySelector("h1"));
+    }
+    await render(module.Home); // New provider instance simulates refresh, with no visitor preference.
+    assert.equal(document.documentElement.dataset.theme, theme);
+  }
+});
+
+test("appearance previews are temporary, failed saves preserve selection, successful save persists and duplicates are blocked", async () => {
+  let saved = "dark-ember", fail = true, writes = 0, release;
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === "/api/appearance") return respond({ theme: saved });
+    if (url === "/api/csrf") return respond({ csrf: "theme-test" });
+    if (url === "/api/admin/appearance") {
+      writes++;
+      await new Promise(resolve => { release = resolve; });
+      if (fail) return respond({ error: "Theme save failed" }, 503);
+      saved = JSON.parse(options.body).theme;
+      return respond({ theme: saved });
+    }
+    throw new Error(`Unexpected request ${url}`);
+  };
+  const Editor = () => React.createElement(module.Appearance, { setDirty: () => {} });
+  await render(Editor);
+  assert.equal(document.querySelectorAll('.theme-choice input[type="radio"]').length, 4);
+  await click(document.querySelector('input[value="clean-white"]'));
+  assert.equal(document.documentElement.dataset.theme, "dark-ember");
+  await click([...document.querySelectorAll("button")].find(el => el.textContent === "Preview theme"));
+  assert.equal(document.documentElement.dataset.theme, "clean-white");
+  assert.equal(saved, "dark-ember");
+  const form = document.querySelector("form");
+  await act(async () => { form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 10)); });
+  assert.equal(writes, 1);
+  assert.ok(document.querySelector("fieldset").disabled);
+  await act(async () => { release(); await new Promise(resolve => setTimeout(resolve, 10)); });
+  assert.match(document.querySelector('[role="alert"]').textContent, /Theme save failed/);
+  assert.equal(document.querySelector('input[value="clean-white"]').checked, true);
+  assert.equal(document.documentElement.dataset.theme, "clean-white");
+  await render(module.Home);
+  assert.equal(document.documentElement.dataset.theme, "dark-ember");
+  await render(Editor);
+  await click(document.querySelector('input[value="midnight-navy"]'));
+  fail = false;
+  await act(async () => { document.querySelector("form").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 10)); release(); await new Promise(resolve => setTimeout(resolve, 10)); });
+  assert.equal(saved, "midnight-navy");
+  assert.equal(document.documentElement.dataset.theme, saved);
+  assert.match(document.querySelector(".notice.success").textContent, /Default theme saved/);
+  await render(module.Home);
+  assert.equal(document.documentElement.dataset.theme, "midnight-navy");
+});
+
+test("appearance loading failure offers retry and prevents saving a guessed default", async () => {
+  let fail = true;
+  globalThis.fetch = () => respond(fail ? { error: "Appearance unavailable" } : { theme: "warm-ivory" }, fail ? 503 : 200);
+  await render(() => React.createElement(module.Appearance, { setDirty: () => {} }));
+  assert.match(document.querySelector('[role="alert"]').textContent, /Appearance unavailable/);
+  assert.equal(document.querySelector("form"), null);
+  fail = false;
+  await click(document.querySelector("button"));
+  assert.equal(document.querySelector('input[value="warm-ivory"]').checked, true);
+});
+
+test("admin mobile drawer traps focus, restores scrolling and closes on section navigation", async () => {
+  globalThis.fetch = url => {
+    if (url === "/api/appearance") return respond({ theme: "warm-ivory" });
+    if (url === "/api/auth/me") return respond({ authenticated: true, csrf: "drawer-test" });
+    if (url === "/api/admin/site") return respond(initialSite);
+    if (url === "/api/admin/projects") return respond(content.projects);
+    if (url === "/api/admin/uploads") return respond([]);
+    if (url === "/api/admin/inquiries") return respond({ items: [], total: 0, page: 1 });
+    throw new Error(`Unexpected request ${url}`);
+  };
+  await render(module.Admin, "/admin");
+  const toggle = document.querySelector('[aria-label="Open dashboard menu"]');
+  await click(toggle);
+  const panel = document.getElementById("admin-sidebar");
+  assert.equal(panel.getAttribute("role"), "dialog");
+  assert.equal(document.body.style.overflow, "hidden");
+  assert.equal(document.querySelector(".admin-main").hasAttribute("inert"), true);
+  assert.equal(document.activeElement.getAttribute("aria-label"), "Close dashboard menu");
+  await act(async () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })));
+  assert.ok(document.activeElement.classList.contains("logout-button"));
+  await act(async () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  assert.equal(document.body.style.overflow, "");
+  assert.equal(document.querySelector(".admin-main").hasAttribute("inert"), false);
+  assert.equal(document.activeElement, toggle);
+  await click(toggle);
+  await click([...panel.querySelectorAll("nav button")].find(el => el.textContent === "Appearance"));
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(document.body.style.overflow, "");
+  assert.equal(document.querySelector("h1").textContent, "Appearance");
+  await click(document.querySelector('input[value="clean-white"]'));
+  await click([...document.querySelectorAll("button")].find(el => el.textContent === "Preview theme"));
+  assert.ok(document.querySelector('dialog[open] .hero'));
+  assert.equal(document.documentElement.dataset.theme, "clean-white");
+  assert.equal(document.body.style.overflow, "hidden");
+  await click(document.querySelector('dialog [aria-label="Close dialog"]'));
+  assert.equal(document.body.style.overflow, "");
+  await click([...document.querySelectorAll("button")].find(el => el.textContent === "Reset preview"));
+  assert.equal(document.documentElement.dataset.theme, "warm-ivory");
+});
+
+test("phone and tablet motion has no pinning, scrub, parallax or continuous orbit", async () => {
+  const original = window.matchMedia;
+  globalThis.fetch = () => respond({ theme: "dark-ember" });
+  try {
+    for (const width of [360, 390, 768]) {
+      window.innerWidth = width;
+      window.matchMedia = query => ({
+        matches: /max-width:\s*1023px/.test(query), media: query,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
+      });
+      await render(module.About);
+      for (const trigger of module.ScrollTrigger.getAll()) {
+        assert.ok(!trigger.vars.pin);
+        assert.ok(!trigger.vars.scrub);
+        assert.ok(!trigger.vars.horizontal);
+      }
+      assert.equal(module.gsap.getTweensOf(document.querySelector(".orbit-ring")).length, 0);
+      assert.equal(module.gsap.getTweensOf(document.querySelector(".journey-progress")).length, 0);
+    }
+  } finally {
+    window.matchMedia = original;
+    window.innerWidth = 1024;
+    await render(module.Home);
+  }
+  assert.equal(module.ScrollTrigger.getAll().length, 0);
 });

@@ -25,6 +25,8 @@ import {
   reorderSchema,
 } from "./validation.js";
 import { localStorageAdapter, saveUpload } from "./storage.js";
+import { validTheme } from "../shared/themes.js";
+import { appearanceSchema } from "./validation.js";
 const unsafe = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const cookieName = "portfolio_session";
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -174,6 +176,17 @@ export function createApp(config) {
     if (!site) throw fail(503, "Portfolio content has not been initialized.");
     res.json(site.content);
   });
+  const readAppearance = async () => {
+    const site = await Site.findById("portfolio").select("appearance").lean();
+    return { theme: validTheme(site?.appearance?.theme) };
+  };
+  app.get("/api/appearance", async (req, res) => res.json(await readAppearance()));
+  // A parser-blocking, same-origin script applies the DB default before first paint.
+  // Only validated enum values are interpolated; no secrets or site content are exposed.
+  app.get("/api/theme.js", async (req, res) => {
+    const { theme } = await readAppearance();
+    res.type("application/javascript").send(`document.documentElement.dataset.theme=${JSON.stringify(theme)};`);
+  });
   app.get("/api/projects", async (req, res) =>
     res.json(
       (
@@ -264,6 +277,13 @@ export function createApp(config) {
   router.use((req, res, next) =>
     unsafe.has(req.method) ? csrfGuard(req, res, next) : next(),
   );
+  router.get("/appearance", async (req, res) => res.json(await readAppearance()));
+  router.put("/appearance", async (req, res) => {
+    const appearance = parse(appearanceSchema, req.body);
+    const site = await Site.findByIdAndUpdate("portfolio", { $set: { appearance } }, { new: true, runValidators: true });
+    if (!site) throw fail(503, "Initialize portfolio content before saving appearance.");
+    res.json({ theme: site.appearance.theme });
+  });
   router.get("/site", async (req, res) =>
     res.json((await Site.findById("portfolio").lean())?.content || null),
   );

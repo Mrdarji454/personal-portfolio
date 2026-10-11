@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { themeIds, defaultTheme } from "../shared/themes.js";
 const { Schema, model } = mongoose;
 export const Admin = model(
   "Admin",
@@ -26,6 +27,9 @@ export const Site = model(
     {
       _id: { type: String, default: "portfolio" },
       content: { type: Schema.Types.Mixed, required: true },
+      appearance: {
+        theme: { type: String, enum: themeIds, default: defaultTheme },
+      },
     },
     { timestamps: true },
   ),

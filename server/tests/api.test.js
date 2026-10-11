@@ -67,6 +67,8 @@ test("repeat-safe seed preserves edits and feature accuracy", async () => {
 test("all admin routes reject anonymous requests; registration does not exist", async () => {
   for (const [method, url] of [
     ["get", "/api/admin/site"],
+    ["get", "/api/admin/appearance"],
+    ["put", "/api/admin/appearance"],
     ["put", "/api/admin/site"],
     ["get", "/api/admin/projects"],
     ["post", "/api/admin/projects"],
@@ -111,6 +113,24 @@ test("login requires CSRF and trusted origin, rejects bad credentials, rotates s
     .set("Origin", origin)
     .send(initialSite)
     .expect(403);
+});
+test("appearance validates, requires CSRF, persists for new visits, and survives content saves", async () => {
+  assert.equal((await request(app).get("/api/appearance").expect(200)).body.theme, "dark-ember");
+  await agent.put("/api/admin/appearance").set("Origin", origin).send({ theme: "clean-white" }).expect(403);
+  for (const theme of ["dark-ember", "clean-white", "midnight-navy", "warm-ivory"]) {
+    assert.equal((await mutate("put", "/api/admin/appearance").send({ theme }).expect(200)).body.theme, theme);
+    assert.equal((await Site.findById("portfolio").lean()).appearance.theme, theme);
+    assert.equal((await request(app).get("/api/appearance").expect(200)).body.theme, theme);
+    const script = await request(app).get("/api/theme.js").expect(200);
+    assert.match(script.headers["content-type"], /javascript/);
+    assert.equal(script.headers["cache-control"], "no-store");
+    assert.equal(script.text, `document.documentElement.dataset.theme=${JSON.stringify(theme)};`);
+    await mutate("put", "/api/admin/site").send(initialSite).expect(200);
+    await seedContent();
+    assert.equal((await agent.get("/api/admin/appearance").expect(200)).body.theme, theme);
+  }
+  for (const body of [{ theme: "system" }, { theme: "<script>" }, { theme: "clean-white", extra: true }]) await mutate("put", "/api/admin/appearance").send(body).expect(422);
+  assert.equal((await request(app).get("/api/appearance")).body.theme, "warm-ivory");
 });
 let draft;
 test("project CRUD, draft privacy, publishing, validation, reordering and confirmation", async () => {

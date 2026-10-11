@@ -1,6 +1,6 @@
 # Mukesh Darji — restored MERN portfolio & private studio
 
-React / Vite / Tailwind CSS with GSAP + ScrollTrigger, an Express API, MongoDB / Mongoose, and a protected `/admin` dashboard. This restores the previous portfolio rather than adding a new design or features.
+React / Vite / Tailwind CSS with GSAP + ScrollTrigger, an Express API, MongoDB / Mongoose, and a protected `/admin` dashboard. The restored portfolio now includes four admin-selected themes and responsive public/admin layouts.
 
 ## Recovery details
 
@@ -34,7 +34,7 @@ Vite proxies `/api` to port 4000. Use a consistent hostname and include the exac
 | `npm run admin:create` | Interactive single-admin setup                      |
 | `npm test`             | MongoDB integration and DOM behavior checks         |
 
-`npm run preview` serves the frontend alone, not the complete MERN application. For production builds, ensure `NODE_ENV=production` in the build environment; the preserved development `.env` may otherwise select React’s development runtime.
+`npm run preview` serves the frontend alone, not the complete MERN application. The build uses Vite's native config loader for this JavaScript ESM config, avoiding restricted Windows parent-directory reads during config bundling. For production builds, ensure `NODE_ENV=production` in the build environment; the preserved development `.env` may otherwise select React’s development runtime.
 
 ## Pages and editing
 
@@ -43,6 +43,23 @@ Home, About, searchable/filterable Projects, unique `/projects/:slug` case studi
 The dashboard restores profile/biography/contact/availability editing, portrait and PDF replacement, skill/education/timeline entry management, project CRUD, ordering and featuring, screenshots, video URLs, private previews, publish/unpublish, inquiries with read/archive status, and a media library. The SVG stays the portrait fallback. Resume remains available as printable HTML without a PDF; uploaded PDFs get preview and download actions. Destructive actions require confirmation. Failed save requests preserve input; reauthentication preserves edits, while forced refresh or closing a tab does not.
 
 Profile saves publish immediately. Project edits publish on save only when Published is checked; uncheck it and save first to edit privately. Public APIs expose only published projects. Existing visitors see newly saved content after reload. Contact inquiries are saved in MongoDB; success is shown only after saving. Email notifications are not included.
+
+## Changing the default theme
+
+1. Sign in at `/admin`. On phones, open the dashboard menu in the compact header.
+2. Open **Appearance**. Select Dark Ember, Clean White, Midnight Navy, or Warm Ivory using the four visual cards (keyboard arrow keys also work for the radio group).
+3. Choose **Preview theme** to temporarily apply your selection to the dashboard and open a homepage preview with your published content. Close the preview to continue editing. **Reset preview** returns to the saved default; leaving Appearance or refreshing discards an unsaved preview.
+4. Choose **Save default theme** to publish the choice. The dashboard updates immediately, and all public pages/new visits use the saved theme. Existing open public tabs pick it up when reloaded. Failed saves retain the selection and preview for retry; saving is disabled while a request is pending. An expired session opens the existing reauthentication dialog without losing the choice.
+
+Appearance lives in `Site.appearance.theme` in MongoDB, separately from profile content. The existing database needs no reset or migration: records without appearance use **Dark Ember** until you save another choice. Profile saves and the repeat-safe seed do not overwrite appearance. Do not seed or recreate your admin just to enable themes.
+
+`GET /api/appearance` exposes only the saved theme. `GET /api/admin/appearance` and `PUT /api/admin/appearance` require the existing admin session; mutations also require the trusted Origin and CSRF token. Only the four theme IDs are accepted.
+
+The shared theme IDs are in `shared/themes.js`; all palette values and semantic tokens are in `public/themes.css`. Public pages, forms, states, project concept previews, navigation, admin editors, and dialogs use those tokens. The portrait SVG is rendered inline with theme tokens while uploaded portraits remain unchanged. Skin colors remain illustration details.
+
+Vite injects a **classic parser-blocking** `/api/theme.js` script into the document head. This applies the MongoDB default before the body is painted, followed by a client recheck. It uses no visitor theme storage or OS color preference. Keep `/api/theme.js` on the same origin as the frontend and do not cache it (the API sends `Cache-Control: no-store`). Include this route in API forwarding rules on split deployments. Start the API alongside Vite; a frontend-only static preview cannot read a database theme. If the API is unreachable, the bundled Dark Ember palette is the fallback; Appearance shows the load failure and Retry instead of saving a guessed default.
+
+Mobile drawers provide an explicit close button, Escape, focus trapping/restoration, background inertness, body scroll locking, active links, and automatic closing when switching sections or widening the viewport. Public layouts use natural vertical sections on phones/tablets. Mobile GSAP reveals are shorter with small movement; continuous orbit, parallax, and scrubbed timeline progress are desktop-only. Reduced-motion mode suppresses animation. Phone admin forms stack fields/cards and keep save bars in document flow so fields and the on-screen keyboard stay usable; dialogs scroll within the viewport.
 
 ## Storage
 
@@ -74,8 +91,10 @@ Page titles, descriptions, Open Graph metadata, favicon, lazy-loaded pages/image
 
 ## Verification
 
-The restored production build passes and all 13 automated checks pass: eight isolated MongoDB integration checks cover repeat-safe seeding, authentication/logout, CSRF/origin enforcement, protected APIs, project CRUD/order/publishing, upload validation/limits/conversion, draft-media privacy, PDF attachment/download, contact persistence/status, and rate limits. Five DOM checks cover mobile-menu toggling/Escape/focus, reduced-motion visibility, project search/empty states, contact failure/success, and failed-admin-save preservation.
+The production build passes and all **21 automated checks** pass. Nine isolated MongoDB integration checks cover repeat-safe seeding, authentication/logout, CSRF/origin enforcement, protected APIs, project CRUD/order/publishing, upload validation/limits/conversion, draft-media privacy, PDF download, contact persistence/status, rate limits, and appearance validation/persistence/bootstrap across all four themes. Appearance tests also verify that content saves/seeding preserve the selection and anonymous or CSRF-free mutations fail.
+
+Ten DOM checks cover navigation focus trapping/Escape/scroll restoration, reduced-motion visibility, project search, contact failure/success, failed admin saves, all four saved themes across Home/About/Projects/Resume/Contact/project details and every admin section, theme refresh persistence, temporary previews, load/save failure and retry, duplicate-save prevention, the admin drawer, and phone/tablet GSAP behavior without pinning, scrub, parallax, or continuous orbit. Two token/config checks verify complete palettes, at least 4.5:1 text/button contrast, at least 3:1 focus/field-border contrast, the blocking bootstrap, and mobile responsive rules.
 
 Tests use temporary MongoDB and upload directories, not the surviving `.env` database. `mongodb-memory-server` uses an official MongoDB binary cached in `.cache/mongodb`; use `MONGOMS_SYSTEM_BINARY` if downloading is restricted. DOM checks use jsdom and mocked requests; they do not verify real layout.
 
-Browser tooling reported no available browser. Actual visual behavior at 360/768/1024/wide desktop, horizontal overflow, video playback, and PDF/print preview remain unverified in a browser. The existing `.env` passed configuration validation without exposing its values. Actual configured-database availability and persisted content were not changed or validated by these isolated checks.
+Browser tooling reported no available browser. Actual visual behavior in all four themes at 360/390/768/tablet/desktop widths, horizontal overflow, touch/virtual-keyboard behavior, video playback, and PDF/print preview remain unverified in a browser. DOM tests do not substitute for rendered viewport inspection. The existing `.env` passed configuration validation without exposing its values. Actual configured-database availability and persisted content were not changed or validated by these isolated checks.

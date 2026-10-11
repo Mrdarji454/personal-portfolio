@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { themeIds } from "../shared/themes.js";
+export const appearanceSchema = z.object({ theme: z.enum(themeIds) }).strict();
 const text = (max = 5000) => z.string().trim().max(max);
 const required = (max = 5000) => text(max).min(1);
 const https = z

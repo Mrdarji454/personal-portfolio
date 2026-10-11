@@ -187,10 +187,10 @@ function About() {
               </div>
               <div className={"orbit-ring"}>
                 {[CodeXml, Database, Braces, Terminal, Globe, Layers].map(
-                  (n, a) => (
+                  (Icon, a) => (
                     <div key={a} className={`orbit-position pos-${a}`}>
                       <div className={"orbit-icon"}>
-                        <n size={25} />
+                        <Icon size={25} />
                       </div>
                     </div>
                   ),

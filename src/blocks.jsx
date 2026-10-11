@@ -1,26 +1,14 @@
+import * as React from "react";
+import { PortraitPlaceholder } from "./PortraitPlaceholder";
 import { Link } from "react-router-dom";
 import { Arrow } from "./ui";
 import { useSite } from "./site";
 import { ProjectVisual } from "./project-visual";
-function Portrait({ person: o, eager: e = !1 }) {
-  return (
-    <img
-      className={"profile-image"}
-      src={o.portrait || "/portrait-placeholder.svg"}
-      alt={
-        o.portrait
-          ? `${o.name}, portrait`
-          : "Illustrated portrait placeholder; replaceable with a real photo"
-      }
-      width={"600"}
-      height={"720"}
-      loading={e ? "eager" : "lazy"}
-      onError={(r) => {
-        r.currentTarget.src.endsWith("portrait-placeholder.svg") ||
-          (r.currentTarget.src = "/portrait-placeholder.svg");
-      }}
-    />
-  );
+function Portrait({ person, eager = false }) {
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => setFailed(false), [person.portrait]);
+  if (!person.portrait || failed) return <PortraitPlaceholder />;
+  return <img className="profile-image" src={person.portrait} alt={`${person.name}, portrait`} width="600" height="720" loading={eager ? "eager" : "lazy"} decoding="async" onError={() => setFailed(true)} />;
 }
 function Preview({ project: o, large: e = !1 }) {
   return o.screenshots.length ? (
