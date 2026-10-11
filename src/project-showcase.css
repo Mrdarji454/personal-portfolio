@@ -1,0 +1,28 @@
+.project-showcase { min-width: 0; max-width: 100%; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); overflow: hidden; position: relative; box-shadow: var(--shadow); transition: border-color .3s, box-shadow .3s; }
+.project-showcase:focus-within { outline: 2px solid var(--focus); outline-offset: 4px; }
+.showcase-case-link { display: block; }
+.project-showcase .project-visual { border-radius: 0; }
+.showcase-stage { position: relative; height: 390px; overflow: hidden; background: var(--surface-raised); }
+.showcase-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
+.showcase-slide.current { opacity: 1; z-index: 1; }
+.showcase-loading { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--text-muted); font-size: var(--text-small); }
+.showcase-open { position: absolute; top: 16px; right: 16px; z-index: 2; padding: 8px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 30px; font-size: var(--text-small); transition: transform .3s; }
+.showcase-controls { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface); }
+.showcase-count { font-size: var(--text-small); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.showcase-count > span { color: var(--text-muted); }
+.showcase-progress { flex: 1; min-width: 12px; height: 2px; background: var(--border); margin-inline: 8px; overflow: hidden; }
+.showcase-progress > span { display: block; width: 100%; height: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; }
+.showcase-control { flex-shrink: 0; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 50%; transition: background .2s, color .2s; }
+.showcase-control:hover { background: var(--accent); color: var(--on-accent); }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .project-showcase:hover { border-color: var(--accent); box-shadow: 0 14px 40px color-mix(in srgb, var(--accent) 12%, transparent); }
+  .project-showcase:hover .showcase-open { transform: translateY(-3px); }
+  .project-copy .text-link > svg { transition: transform .25s; }
+  .project-copy .text-link:hover > svg { transform: translate(3px, -3px); }
+}
+@media (max-width: 800px) { .showcase-stage { height: clamp(240px, 55vw, 390px); } }
+@media (max-width: 480px) {
+  .showcase-controls { padding: 10px; gap: 6px; }
+  .showcase-progress { margin-inline: 4px; }
+  .showcase-open { top: 12px; right: 12px; }
+}

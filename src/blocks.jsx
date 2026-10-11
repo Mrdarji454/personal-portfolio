@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Arrow } from "./ui";
 import { useSite } from "./site";
 import { ProjectVisual } from "./project-visual";
+import { ProjectShowcase } from "./ProjectShowcase";
 function Portrait({ person, eager = false }) {
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => setFailed(false), [person.portrait]);
@@ -27,13 +28,7 @@ function Preview({ project: o, large: e = !1 }) {
 function ProjectRow({ project: o, index: e = 0 }) {
   return (
     <article className={`project-row project-${o.theme}`} data-reveal={!0}>
-      <Link
-        className={"visual-link"}
-        to={`/projects/${o.slug}`}
-        aria-label={`Read ${o.name} case study`}
-      >
-        <Preview project={o} />
-      </Link>
+      <ProjectShowcase key={`${o.slug}:${o.screenshots.map(shot => shot.src).join(",")}`} project={o} />
       <div className={"project-copy"}>
         <div className={"project-meta"}>
           <span>

@@ -9,7 +9,6 @@ import {
   Layers,
   Search,
   ArrowLeft,
-  Printer,
   Download,
 } from "lucide-react";
 import { Arrow, Socials } from "../ui";
@@ -22,7 +21,8 @@ import {
   ContactCTA,
   SkillList,
 } from "../blocks";
-import { usePageMotion, pauseOrbit, useSEO } from "../motion";
+import { usePageMotion, useSEO } from "../motion";
+import { PortraitBackdrop } from "../PortraitBackdrop";
 function Home() {
   const { person: o, hero: e, projects: r, skills: i } = useSite(),
     s = usePageMotion();
@@ -56,7 +56,7 @@ function Home() {
             </div>
           </div>
           <div className={"hero-portrait hero-reveal"}>
-            <div className={"portrait-halo"} />
+            <PortraitBackdrop />
             <Portrait person={o} eager={!0} />
             <div className={"portrait-badge"}>
               <span className={"status-dot"} />
@@ -173,28 +173,25 @@ function About() {
           <div className={"container about-grid"}>
             <div
               className={"profile-orbit"}
-              tabIndex={"0"}
-              aria-label={"Skill orbit. Hover or focus to pause animation."}
-              onMouseEnter={(n) => pauseOrbit(n, !0)}
-              onMouseLeave={(n) => pauseOrbit(n, !1)}
-              onFocus={(n) => pauseOrbit(n, !0)}
-              onBlur={(n) => pauseOrbit(n, !1)}
             >
-              <div className={"orbit-guide"} />
-              <div className={"orbit-guide inner"} />
+              <div className={"orbit-guide"} aria-hidden="true" />
+              <div className={"orbit-guide inner"} aria-hidden="true" />
               <div className={"portrait"}>
                 <Portrait person={o} />
               </div>
-              <div className={"orbit-ring"}>
-                {[CodeXml, Database, Braces, Terminal, Globe, Layers].map(
-                  (Icon, a) => (
-                    <div key={a} className={`orbit-position pos-${a}`}>
-                      <div className={"orbit-icon"}>
-                        <Icon size={25} />
+              <div className="orbit-stage">
+                <div className="orbit-ring" role="list" aria-label="Development technologies">
+                {[[CodeXml, "React"], [Database, "MongoDB"], [Braces, "JavaScript"], [Terminal, "Node.js"], [Globe, "HTML / CSS"], [Layers, "Express.js"]].map(
+                  ([Icon, label], a) => (
+                    <div key={label} className="orbit-position" role="listitem" style={{ left: `${50 + 50 * Math.sin(a * Math.PI / 3)}%`, top: `${50 - 50 * Math.cos(a * Math.PI / 3)}%` }}>
+                      <div className="orbit-counter">
+                        <span className="orbit-icon"><Icon size={24} aria-hidden="true" /></span>
+                        <span className="orbit-label">{label}</span>
                       </div>
                     </div>
                   ),
                 )}
+                </div>
               </div>
               <div className={"orbit-note"}>
                 <span className={"status-dot"} />
@@ -789,120 +786,52 @@ function Contact() {
   );
 }
 function Resume() {
-  const {
-    person: o,
-    education: e,
-    biography: r,
-    skills: i,
-    projects: s,
-  } = useSite();
+  const { person, biography } = useSite();
+  const paragraphs = biography.split(/\n\s*\n/).map(text => text.trim()).filter(Boolean);
+  useSEO("Resume", `${person.name}'s uploaded resume and a short introduction to their development interests.`);
   return (
-    useSEO(
-      "Resume",
-      `${o.name} — education, technical skills, and project contributions.`,
-    ),
-    (
-      <main id={"main"} className={"light-page resume-page"}>
-        <header className={"light-nav container no-print"}>
-          <Link to={"/about"}>
-            <ArrowLeft size={18} />
-            {"About me"}
-          </Link>
-          <div className={"resume-actions"}>
-            <button onClick={() => window.print()}>
-              <Printer size={17} />
-              {"Print / Save PDF"}
-            </button>
-            {o.resumePdf && (
-              <a href={`${o.resumePdf}?download=1`}>
-                <Download size={17} />
-                {"Download PDF"}
-              </a>
-            )}
+    <main id="main" className="light-page resume-page uploaded-resume-page">
+      <section className="container resume-document" aria-labelledby="resume-title">
+        <header className="resume-document-heading">
+          <div>
+            <div className="eyebrow">RESUME</div>
+            <h1 id="resume-title">My resume.</h1>
           </div>
-        </header>
-        <article className={"resume-sheet"}>
-          <header className={"resume-header"}>
-            <div>
-              <div className={"eyebrow"}>{"RESUME"}</div>
-              <h1>{o.fullName}</h1>
-              <p>{o.role}</p>
+          {person.resumePdf && (
+            <div className="resume-document-actions">
+              <a className="button subtle" href={person.resumePdf} target="_blank" rel="noreferrer">Open PDF <Arrow /></a>
+              <a className="button primary" href={`${person.resumePdf}?download=1`}><Download size={18} /> Download resume</a>
             </div>
-            <span className={"resume-monogram"}>{"md."}</span>
-          </header>
-          <div className={"resume-contact"}>
-            <span>{o.location}</span>
-            <a href={`mailto:${o.email}`}>{o.email}</a>
-            {o.github && <a href={o.github}>{"GitHub profile"}</a>}
-            {o.linkedin && <a href={o.linkedin}>{"LinkedIn profile"}</a>}
-          </div>
-          <section>
-            <h2>{"Profile"}</h2>
-            <p>{r}</p>
-          </section>
-          <section>
-            <h2>{"Education"}</h2>
-            {e.map((t, n) => (
-              <div key={n}>
-                <div className={"resume-between"}>
-                  <strong>{t.degree}</strong>
-                  <span>{t.graduation && `Expected ${t.graduation}`}</span>
-                </div>
-                <p>
-                  {t.institution}
-                  <br />
-                  {t.score}
-                </p>
+          )}
+        </header>
+        {person.resumePdf ? (
+          <div className="resume-pdf-frame">
+            <object data={person.resumePdf} type="application/pdf" width="100%" height="800" aria-label={`Uploaded resume for ${person.fullName}`}>
+              <div className="empty-state">
+                <p>Your browser cannot display this PDF here.</p>
+                <a className="button primary" href={person.resumePdf} target="_blank" rel="noreferrer">Open uploaded resume <Arrow /></a>
               </div>
-            ))}
-          </section>
-          <section>
-            <h2>{"Technical skills"}</h2>
-            {i.map((t, n) => (
-              <p key={n} className={"resume-skill"}>
-                <strong>{t.title}</strong>
-                <span>{t.items.join(" · ")}</span>
-              </p>
-            ))}
-          </section>
-          <section>
-            <h2>{"Projects"}</h2>
-            {s.map((t) => (
-              <article key={t._id} className={"resume-project"}>
-                <div className={"resume-between"}>
-                  <strong>{t.name}</strong>
-                  <span>{t.status}</span>
-                </div>
-                <p>{t.description}</p>
-                <p>
-                  <strong>{"Contribution:"}</strong>{" "}
-                  {t.contributionDetail || t.contribution}
-                </p>
-                <p>{t.featureNote}</p>
-                {t.repository && <a href={t.repository}>{t.repository}</a>}
-              </article>
-            ))}
-          </section>
-          <section>
-            <h2>{"Languages"}</h2>
-            <p>{o.languages.join(" · ")}</p>
-          </section>
-        </article>
-        {o.resumePdf && (
-          <section className={"container no-print pdf-preview"}>
-            <h2>{"Uploaded resume"}</h2>
-            <object
-              data={o.resumePdf}
-              type={"application/pdf"}
-              width={"100%"}
-              height={"800"}
-            >
-              <a href={o.resumePdf}>{"Open resume PDF"}</a>
             </object>
-          </section>
+          </div>
+        ) : (
+          <div className="empty-state resume-upload-empty" role="status">
+            <h2>Resume coming soon.</h2>
+            <p>The uploaded resume will appear here when it is available.</p>
+          </div>
         )}
-      </main>
-    )
+      </section>
+      {paragraphs.length > 0 && (
+        <article className="container resume-story" aria-labelledby="resume-story-title">
+          <div className="eyebrow">BEHIND THE RESUME</div>
+          <h2 id="resume-story-title">A little more about me.</h2>
+          <div className="resume-story-copy">
+            {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+          </div>
+          <Link className="text-link" to="/about">Explore my journey <Arrow /></Link>
+        </article>
+      )}
+    </main>
   );
 }
+
 export { Home, About, Projects, ProjectDetails, CaseStudy, Contact, Resume };

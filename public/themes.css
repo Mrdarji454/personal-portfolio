@@ -108,6 +108,8 @@
   --portrait-ink: #fff3e2;
 }
 :root, [data-theme] {
+  --text-body: 1.0625rem;
+  --text-small: .9375rem;
   --orange: var(--accent);
   --muted: var(--text-muted);
   --line: var(--border);

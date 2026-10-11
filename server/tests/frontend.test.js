@@ -170,6 +170,11 @@ test("reduced-motion pages remain visible and create no page tweens or triggers"
   assert.equal(module.gsap.getTweensOf(document.querySelector("h1")).length, 0);
   assert.notEqual(document.querySelector("h1").style.opacity, "0");
   assert.ok(document.querySelector('svg[aria-label*="portrait placeholder"]'));
+  await render(module.About, "/about");
+  assert.equal(module.ScrollTrigger.getAll().length, 0);
+  assert.equal(module.gsap.getTweensOf(document.querySelector(".orbit-ring")).length, 0);
+  assert.equal(document.querySelectorAll(".orbit-label").length, 6);
+  assert.match(document.querySelector(".profile-orbit").textContent, /MongoDB/);
 });
 test("project search finds matching work and has a usable empty state", async () => {
   await render(module.Projects, "/projects");
@@ -401,7 +406,7 @@ test("admin mobile drawer traps focus, restores scrolling and closes on section 
   assert.equal(document.documentElement.dataset.theme, "warm-ivory");
 });
 
-test("phone and tablet motion has no pinning, scrub, parallax or continuous orbit", async () => {
+test("phone and tablet motion avoids pinning and scrub while the labelled orbit rotates continuously", async () => {
   const original = window.matchMedia;
   globalThis.fetch = () => respond({ theme: "dark-ember" });
   try {
@@ -417,7 +422,19 @@ test("phone and tablet motion has no pinning, scrub, parallax or continuous orbi
         assert.ok(!trigger.vars.scrub);
         assert.ok(!trigger.vars.horizontal);
       }
-      assert.equal(module.gsap.getTweensOf(document.querySelector(".orbit-ring")).length, 0);
+      const ring = document.querySelector(".orbit-ring");
+      const counter = document.querySelector(".orbit-counter");
+      const orbit = module.gsap.getTweensOf(ring);
+      assert.equal(orbit.length, 1);
+      assert.equal(orbit[0].parent.repeat(), -1);
+      assert.equal(document.querySelectorAll(".orbit-label").length, 6);
+      ring.dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
+      ring.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+      assert.equal(orbit[0].paused(), false);
+      assert.equal(orbit[0].parent.paused(), false);
+      orbit[0].parent.progress(.25);
+      assert.equal(Math.round(module.gsap.getProperty(ring, "rotation")), 90);
+      assert.equal(Math.round(module.gsap.getProperty(counter, "rotation")), -90);
       assert.equal(module.gsap.getTweensOf(document.querySelector(".journey-progress")).length, 0);
     }
   } finally {
@@ -426,4 +443,100 @@ test("phone and tablet motion has no pinning, scrub, parallax or continuous orbi
     await render(module.Home);
   }
   assert.equal(module.ScrollTrigger.getAll().length, 0);
+});
+
+test("home portrait backdrop simplifies phone motion, pauses offscreen and cleans up on navigation", async () => {
+  const originalMedia = window.matchMedia;
+  const originalObserver = globalThis.IntersectionObserver;
+  let notify, disconnected = 0, hidden = false;
+  globalThis.IntersectionObserver = class {
+    constructor(callback) { this.callback = callback; }
+    observe(target) { this.backdrop = target.classList.contains("portrait-atmosphere"); if (this.backdrop) notify = this.callback; }
+    disconnect() { if (this.backdrop) disconnected++; }
+  };
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  globalThis.fetch = () => respond({ theme: "dark-ember" });
+  try {
+    for (const width of [390, 1440]) {
+      window.matchMedia = query => ({
+        matches: query.includes("min-width: 1024px") ? width >= 1024 : query.includes("max-width: 1023px") && width < 1024,
+        media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
+      });
+      await render(module.Home);
+      assert.equal(document.querySelector(".portrait-atmosphere").getAttribute("aria-hidden"), "true");
+      const track = document.querySelector(".portrait-track-a");
+      const [tween] = module.gsap.getTweensOf(track);
+      assert.equal(tween.repeat(), -1);
+      assert.equal(module.gsap.getTweensOf(document.querySelector(".portrait-track-b")).length, width >= 1024 ? 1 : 0);
+      tween.progress(.25);
+      assert.equal(Math.round(module.gsap.getProperty(track, "rotation")), 90);
+      notify([{ isIntersecting: false }]);
+      assert.equal(tween.paused(), true);
+      hidden = true;
+      notify([{ isIntersecting: true }]);
+      assert.equal(tween.paused(), true);
+      hidden = false;
+      document.dispatchEvent(new window.Event("visibilitychange"));
+      assert.equal(tween.paused(), false);
+      await render(module.Projects, "/projects");
+      assert.equal(module.gsap.getTweensOf(track).length, 0);
+    }
+    assert.equal(disconnected, 2);
+  } finally {
+    window.matchMedia = originalMedia;
+    globalThis.IntersectionObserver = originalObserver;
+    delete document.hidden;
+    await render(module.Home);
+  }
+});
+
+test("home screenshot controls work without motion, skip failed images and preserve case study links", async () => {
+  const project = content.projects.find(project => project.featured);
+  const original = project.screenshots;
+  project.screenshots = ["first", "second", "third"].map(name => ({ src: `/uploads/${name}.webp`, alt: `${name} screenshot`, width: 1600, height: 1000 }));
+  try {
+    await render(module.Home);
+    const cover = document.querySelector(".project-showcase");
+    assert.equal(cover.getAttribute("aria-roledescription"), "carousel");
+    assert.equal(cover.querySelector("a").getAttribute("href"), `/projects/${project.slug}`);
+    assert.equal(cover.querySelector("button[aria-label^='Play']"), null);
+    assert.equal(cover.querySelector("button[aria-label^='Pause']"), null);
+    await click(cover.querySelector("button[aria-label^='Next']"));
+    assert.equal(cover.querySelector(".current").getAttribute("src"), "/uploads/second.webp");
+    assert.equal(module.gsap.getTweensOf(cover.querySelector(".current")).length, 0);
+    await act(async () => cover.querySelector(".current").dispatchEvent(new window.Event("error")));
+    assert.equal(cover.querySelector(".current").getAttribute("src"), "/uploads/third.webp");
+    await click(cover.querySelector("button[aria-label^='Previous']"));
+    assert.equal(cover.querySelector(".current").getAttribute("src"), "/uploads/first.webp");
+    await act(async () => cover.querySelector(".current").dispatchEvent(new window.Event("error")));
+    assert.equal(cover.querySelectorAll("button").length, 0);
+    await act(async () => cover.querySelector(".current").dispatchEvent(new window.Event("error")));
+    assert.ok(cover.querySelector(".project-visual"));
+  } finally { project.screenshots = original; await render(module.Home); }
+});
+
+test("home slideshow advances in order, pauses on hover and cleans up after navigation", async () => {
+  const project = content.projects.find(project => project.featured);
+  const originalShots = project.screenshots, originalMedia = window.matchMedia;
+  project.screenshots = ["first", "second", "third"].map(name => ({ src: `/uploads/${name}.webp`, alt: name, width: 1600, height: 1000 }));
+  window.matchMedia = query => ({ matches: query.includes("max-width: 1023px"), media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+  try {
+    await render(module.Home);
+    const cover = document.querySelector(".project-showcase"), bar = cover.querySelector(".showcase-progress > span");
+    await act(async () => cover.querySelector(".current").dispatchEvent(new window.Event("load")));
+    assert.equal(module.gsap.getTweensOf(bar).length, 1);
+    await act(async () => cover.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true })));
+    assert.equal(module.gsap.getTweensOf(bar).length, 0);
+    await act(async () => cover.dispatchEvent(new window.MouseEvent("mouseout", { bubbles: true })));
+    await act(async () => module.gsap.getTweensOf(bar)[0].progress(1));
+    assert.equal(cover.querySelector(".current").getAttribute("src"), "/uploads/second.webp");
+    await act(async () => cover.querySelector(".current").dispatchEvent(new window.Event("load")));
+    await act(async () => module.gsap.getTweensOf(bar)[0].progress(1));
+    assert.equal(cover.querySelector(".current").getAttribute("src"), "/uploads/third.webp");
+    await click(cover.querySelector("button[aria-label^='Previous']"));
+    assert.equal(module.gsap.getTweensOf(bar).length, 0);
+    assert.ok(cover.querySelector("button[aria-label^='Play']"));
+    await render(module.Projects, "/projects");
+    assert.equal(module.gsap.getTweensOf(bar).length, 0);
+  } finally { project.screenshots = originalShots; window.matchMedia = originalMedia; await render(module.Home); }
 });
