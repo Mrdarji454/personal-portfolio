@@ -9,7 +9,7 @@ async function hiddenPassword() {
     throw new Error(
       "Run this script in an interactive terminal so the password can be entered privately.",
     );
-  stdout.write("Password (12–72 UTF-8 bytes, hidden): ");
+  stdout.write("Password (8–72 UTF-8 bytes, hidden): ");
   stdin.setRawMode(true);
   stdin.resume();
   return new Promise((resolve, reject) => {
@@ -54,8 +54,8 @@ try {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 250)
     throw new Error("Enter a valid email.");
   const password = await hiddenPassword();
-  if (Buffer.byteLength(password) < 12 || Buffer.byteLength(password) > 72)
-    throw new Error("Password must contain 12–72 UTF-8 bytes.");
+  if (Buffer.byteLength(password) < 8 || Buffer.byteLength(password) > 72)
+    throw new Error("Password must contain 8–72 UTF-8 bytes.");
   await Admin.create({
     _id: "administrator",
     email,

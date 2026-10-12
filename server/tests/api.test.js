@@ -94,8 +94,11 @@ test("login requires CSRF and trusted origin, rejects bad credentials, rotates s
     .send({ email: "admin@example.com", password })
     .expect(403);
   await mutate("post", "/api/auth/login")
-    .send({ email: "admin@example.com", password: "wrong" })
+    .send({ email: "admin@example.com", password: "wrong-passphrase" })
     .expect(401);
+  await mutate("post", "/api/auth/login")
+    .send({ email: "admin@example.com", password: "short" })
+    .expect(422);
   const old = token,
     result = await mutate("post", "/api/auth/login")
       .send({ email: "admin@example.com", password })

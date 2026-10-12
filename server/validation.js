@@ -129,7 +129,7 @@ export const inquirySchema = z
   })
   .strict();
 export const loginSchema = z
-  .object({ email: z.email().max(250), password: z.string().min(1).max(72) })
+  .object({ email: z.email().max(250), password: z.string().min(8).max(72) })
   .strict();
 export const reorderSchema = z
   .object({ ids: z.array(z.string().regex(/^[a-f0-9]{24}$/)).max(200) })
